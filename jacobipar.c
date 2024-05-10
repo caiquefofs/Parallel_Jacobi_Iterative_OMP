@@ -45,8 +45,7 @@ int main(int argc, char *argv[]){
     long double* X_anterior = (long double*)calloc(n, sizeof(long double));
 
     //Inicializa as matrizes
-
-    //#pragma omp parallel for private(i, j) shared(A) num_threads(T)
+    #pragma omp parallel for private(i, j, semente) shared(A, B) num_threads(T)
     for(i=0;i<n;i++){
         semente = rand() % 100;
         for(j=0; j<n; j++){
@@ -56,34 +55,15 @@ int main(int argc, char *argv[]){
                 A[i][j] = geraNumeros(semente);
             }
         }
-    }
-
-    //#pragma omp parallel for private(i) shared(B) num_threads(T)
-    for(i=0;i<n;i++){
         B[i] = geraB(semente);
-        semente = rand() % 100;
     }
 
-    //#pragma omp parallel for private(i) shared(X_atual, X_anterior) num_threads(T)
+    // Inicialização dos vetores X_atual e X_anterior
+    #pragma omp parallel for private(i) shared(X_atual, X_anterior) num_threads(T)
     for(i=0;i<n;i++){
         X_atual[i] = 0;
         X_anterior[i] = 0;
     }
-
-    /*//Código para imprimir a matriz A e o vetor B
-    printf("A = \n");
-    for(i=0;i<n;i++){
-        for(j=0; j<n; j++){
-            printf(" %Lf ", A[i][j]);
-        }
-        printf("\n");
-    }
-    printf("B = ");
-    for(i=0;i<n;i++){
-        printf(" %Lf ", B[i]);
-    }
-    printf("\n");*/
-    
 
     k = 0;
     while(erro > e){
@@ -96,28 +76,35 @@ int main(int argc, char *argv[]){
         }
 
         //Começa as iterações
-        #pragma omp parallel for private(i, j, soma) shared(X_atual, X_anterior) num_threads(T)
-        for(i=0;i<n;i++){
-            soma=0;
-            for(j=0;j<n;j++){
-                if(i!=j){
-                    soma += (A[i][j]/A[i][i])*X_anterior[j];
-                }   
+        #pragma omp parallel num_threads(T)
+        {
+            #pragma omp single nowait
+            {
+                for(i=0;i<n;i++){
+                    #pragma omp task firstprivate(i) shared(X_atual, X_anterior, erro) depend(in:X_anterior[:n]) depend(out:X_atual[i]) 
+                    {
+                        soma = 0;
+                        for(j=0;j<n;j++){
+                            if(i!=j){
+                                soma += (A[i][j]/A[i][i])*X_anterior[j];
+                            }   
+                        }
+                        soma += (B[i]/A[i][i]);
+                        X_atual[i] = soma;
+                        erroParcial = fabs(X_atual[i] - X_anterior[i]);
+                        if(erroParcial>erro){
+                            #pragma omp critical
+                            if(erroParcial>erro){
+                                erro = erroParcial;
+                            }
+                        }
+                    }
+                }
             }
-            soma += (B[i]/A[i][i]);
-            X_atual[i] = soma;
-            //printf("X%d = %Lf ; ",i,X_atual[i]);
+            #pragma omp taskwait
         }
-        //printf("\n");
 
-        //Calcula o erro
-        for(i=0;i<n;i++){
-            erroParcial = fabs(X_atual[i] - X_anterior[i]);
-            if(erroParcial>erro){
-                erro = erroParcial;
-            }
-            X_anterior[i] = X_atual[i];
-        }
+
 
         k++;
     }
