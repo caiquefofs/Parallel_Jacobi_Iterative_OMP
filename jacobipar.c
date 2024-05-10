@@ -84,6 +84,7 @@ int main(int argc, char *argv[]){
                     #pragma omp task firstprivate(i) shared(X_atual, X_anterior, erro) depend(in:X_anterior[:n]) depend(out:X_atual[i]) 
                     {
                         soma = 0;
+                        #pragma omp simd reduction(+:soma)
                         for(j=0;j<n;j++){
                             if(i!=j){
                                 soma += (A[i][j]/A[i][i])*X_anterior[j];
